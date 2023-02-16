@@ -1,7 +1,10 @@
+target
+offline_datawarehouse
 flink-1.16.1-bin-scala_2.12.tgz
 flink-1.16.1
 kafka-3.4.0-src.tgz
 kafka-3.4.0-src
+kafka-src
 examples-scala.jar
 recipes
 flink-training
