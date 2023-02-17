@@ -120,6 +120,7 @@ def write_multi_sinks():
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/kafka/
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/filesystem/
     需要启动kafka，可以通过consumer命令行观察输出情况
+    解决hadoop依赖：https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/dev/configuration/advanced/#hadoop-dependencies
     """
     env = EnvironmentSettings.in_streaming_mode()
     table_env = TableEnvironment.create(env)
@@ -140,7 +141,7 @@ CREATE TEMPORARY TABLE server_logs (
   'fields.client_identity.expression' =  '-',
   'fields.userid.expression' =  '-',
   'fields.user_agent.expression' = '#{Internet.userAgent}',
-  'fields.log_time.expression' =  '#{date.past ''15'',''5'',''SECONDS''}',
+  'fields.log_time.expression' =  '#{date.past ''65'',''5'',''SECONDS''}',
   'fields.request_line.expression' = '#{regexify ''(GET|POST|PUT|PATCH){1}''} #{regexify ''(/search\.html|/login\.html|/prod\.html|cart\.html|/order\.html){1}''} #{regexify ''(HTTP/1\.1|HTTP/2|/HTTP/1\.0){1}''}',
   'fields.status_code.expression' = '#{regexify ''(200|201|204|400|401|403|301){1}''}',
   'fields.size.expression' = '#{number.numberBetween ''100'',''10000000''}'
@@ -161,18 +162,20 @@ CREATE TEMPORARY TABLE realtime_aggregations (
   'format' = 'json' 
 );    
     """)
+    # TODO: format parquet
     table_env.execute_sql("""
 CREATE TEMPORARY TABLE offline_datawarehouse (
     `browser`     STRING,
     `status_code` STRING,
     `dt`          STRING,
     `hour`        STRING,
+    `minute`      STRING,
     `requests`    BIGINT NOT NULL
-) PARTITIONED BY (`dt`, `hour`) WITH (
+) PARTITIONED BY (`dt`, `hour`, `minute`) WITH (
   'connector' = 'filesystem',
-  'path' = 'file:///Users/frankma/dev/db/fedomn/flink-playground/kafka/offline_datawarehouse',
+  'path' = 'file:///Users/frankma/dev/db/fedomn/flink-playground/pyflink/sql/offline_datawarehouse',
   'sink.partition-commit.trigger' = 'partition-time', 
-  'format' = 'parquet' 
+  'format' = 'json' 
 );    
     """)
     table_env.execute_sql("""
@@ -203,6 +206,7 @@ SELECT
     status_code,
     DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'yyyy-MM-dd') AS `dt`,
     DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'HH') AS `hour`,
+    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'mm') AS `minute`,
     COUNT(*) requests
 FROM browsers
 GROUP BY 
@@ -210,8 +214,7 @@ GROUP BY
     status_code,
     TUMBLE(log_time, INTERVAL '1' MINUTE);    
     """)
-    # table_env.execute_sql("select * from realtime_aggregations").print()
-    table_env.execute_sql("select * from offline_datawarehouse").print()
+    table_env.execute_sql("select * from realtime_aggregations").print()
 
 
 if __name__ == '__main__':
