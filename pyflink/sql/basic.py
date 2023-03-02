@@ -1,4 +1,6 @@
-from pyflink.table import EnvironmentSettings, TableEnvironment
+from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode, \
+    FsStateBackend
+from pyflink.table import EnvironmentSettings, TableEnvironment, StreamTableEnvironment
 
 
 def datagen_for_local_testing():
@@ -120,10 +122,20 @@ def write_multi_sinks():
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/kafka/
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/filesystem/
     需要启动kafka，可以通过consumer命令行观察输出情况
-    解决hadoop依赖：https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/dev/configuration/advanced/#hadoop-dependencies
+
+    解决hadoop依赖：
+    https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/dev/configuration/advanced/#hadoop-dependencies
+
+    FileSink问题：https://stackoverflow.com/questions/65546792/how-does-the-file-system-connector-sink-work
+    https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/datastream/filesystem/#file-sink
     """
-    env = EnvironmentSettings.in_streaming_mode()
-    table_env = TableEnvironment.create(env)
+    env = StreamExecutionEnvironment.get_execution_environment()
+    env.enable_checkpointing(65 * 1000, CheckpointingMode.AT_LEAST_ONCE)
+    env.set_state_backend(
+        FsStateBackend("file:///Users/frankma/dev/db/fedomn/flink-playground/pyflink/sql/checkpoints"))
+    table_env = StreamTableEnvironment.create(env)
+    # env = EnvironmentSettings.in_streaming_mode()
+    # table_env = TableEnvironment.create(env)
     table_env.execute_sql("""
 CREATE TEMPORARY TABLE server_logs ( 
     client_ip       STRING,
@@ -134,7 +146,7 @@ CREATE TEMPORARY TABLE server_logs (
     request_line    STRING, 
     status_code     STRING, 
     size            INT,
-    WATERMARK FOR log_time AS log_time - INTERVAL '30' SECONDS
+    WATERMARK FOR log_time AS log_time - INTERVAL '0' SECONDS
 ) WITH (
   'connector' = 'faker', 
   'fields.client_ip.expression' = '#{Internet.publicIpV4Address}',
@@ -162,7 +174,6 @@ CREATE TEMPORARY TABLE realtime_aggregations (
   'format' = 'json' 
 );    
     """)
-    # TODO: format parquet
     table_env.execute_sql("""
 CREATE TEMPORARY TABLE offline_datawarehouse (
     `browser`     STRING,
@@ -175,6 +186,12 @@ CREATE TEMPORARY TABLE offline_datawarehouse (
   'connector' = 'filesystem',
   'path' = 'file:///Users/frankma/dev/db/fedomn/flink-playground/pyflink/sql/offline_datawarehouse',
   'sink.partition-commit.trigger' = 'partition-time', 
+  'sink.partition-commit.watermark-time-zone' = 'Asia/Shanghai',
+  'sink.partition-commit.policy.kind' = 'success-file',
+  'sink.partition-commit.delay' = '0s',
+  'sink.rolling-policy.check-interval' = '5s',
+  'sink.rolling-policy.rollover-interval' = '65s',
+  'sink.rolling-policy.inactivity-interval' = '80s',
   'format' = 'json' 
 );    
     """)

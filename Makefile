@@ -30,3 +30,11 @@ pyflink-libs:
 
 pyflink-prepare:
 	 python3 -m pip install apache-flink
+
+pyflink-log:
+	- $(eval LIB_PATH=$(shell pip3 show apache-flink | grep 'Location' | grep -oE ": (.*)" | cut -c3-))
+	tail -f ${LIB_PATH}/pyflink/log/flink-frankma-python-*.log
+
+pyflink-dir:
+	- $(eval LIB_PATH=$(shell pip3 show apache-flink | grep 'Location' | grep -oE ": (.*)" | cut -c3-))
+	cd ${LIB_PATH}/pyflink

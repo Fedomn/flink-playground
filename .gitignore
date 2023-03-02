@@ -5,8 +5,11 @@ flink-1.16.1
 kafka-3.4.0-src.tgz
 kafka-3.4.0-src
 kafka-src
+hadoop-3.3.4.tar.gz
+hadoop-3.3.4
 examples-scala.jar
 recipes
 flink-training
 flink-sql-cookbook
 awesome-flink
+checkpoints
