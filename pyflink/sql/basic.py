@@ -1,3 +1,5 @@
+import os
+
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode, \
     FsStateBackend
 from pyflink.table import EnvironmentSettings, TableEnvironment, StreamTableEnvironment
@@ -129,10 +131,10 @@ def write_multi_sinks():
     FileSink问题：https://stackoverflow.com/questions/65546792/how-does-the-file-system-connector-sink-work
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/datastream/filesystem/#file-sink
     """
+    abspath = os.path.abspath('')  # pyflink/sql
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(65 * 1000, CheckpointingMode.AT_LEAST_ONCE)
-    env.set_state_backend(
-        FsStateBackend("file:///Users/frankma/dev/db/fedomn/flink-playground/pyflink/sql/checkpoints"))
+    env.set_state_backend(FsStateBackend(f"file://{abspath}/checkpoints"))
     table_env = StreamTableEnvironment.create(env)
     # env = EnvironmentSettings.in_streaming_mode()
     # table_env = TableEnvironment.create(env)
@@ -174,7 +176,7 @@ CREATE TEMPORARY TABLE realtime_aggregations (
   'format' = 'json' 
 );    
     """)
-    table_env.execute_sql("""
+    table_env.execute_sql(f"""
 CREATE TEMPORARY TABLE offline_datawarehouse (
     `browser`     STRING,
     `status_code` STRING,
@@ -184,7 +186,7 @@ CREATE TEMPORARY TABLE offline_datawarehouse (
     `requests`    BIGINT NOT NULL
 ) PARTITIONED BY (`dt`, `hour`, `minute`) WITH (
   'connector' = 'filesystem',
-  'path' = 'file:///Users/frankma/dev/db/fedomn/flink-playground/pyflink/sql/offline_datawarehouse',
+  'path' = 'file:///{abspath}/offline_datawarehouse',
   'sink.partition-commit.trigger' = 'partition-time', 
   'sink.partition-commit.watermark-time-zone' = 'Asia/Shanghai',
   'sink.partition-commit.policy.kind' = 'success-file',
