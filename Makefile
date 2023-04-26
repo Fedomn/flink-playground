@@ -5,6 +5,7 @@ flink-bin:
 start:
 	cd flink-1.17.0 && ./bin/start-cluster.sh
 	open http://localhost:8081
+	# change flink-conf.yaml taskmanager.numberOfTaskSlots: 30
 
 run:
 	#wget https://streaming-with-flink.github.io/examples/download/examples-scala.jar
@@ -18,3 +19,4 @@ reference-clone:
 	gh repo clone apache/flink-training
 	gh repo clone ververica/flink-sql-cookbook
 	gh repo clone wuchong/awesome-flink
+	git clone https://gitee.com/geektime-geekbang/geektime-Flink.git

@@ -3,6 +3,7 @@ import os
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode, \
     FsStateBackend
 from pyflink.table import EnvironmentSettings, TableEnvironment, StreamTableEnvironment
+from pyflink.table.catalog import HiveCatalog
 
 
 def datagen_for_local_testing():
@@ -119,17 +120,23 @@ ORDER BY
     """).print()
 
 
-def write_multi_sinks():
+def write_multi_sinks_in_local_cluster():
     """
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/kafka/
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/table/filesystem/
     需要启动kafka，可以通过consumer命令行观察输出情况
 
-    解决hadoop依赖：
+    解决hadoop依赖：(maybe for parquet)
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/dev/configuration/advanced/#hadoop-dependencies
 
-    FileSink问题：https://stackoverflow.com/questions/65546792/how-does-the-file-system-connector-sink-work
+    FileSink问题：
+    https://stackoverflow.com/questions/65546792/how-does-the-file-system-connector-sink-work
     https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/connectors/datastream/filesystem/#file-sink
+
+    # 运行前准备：
+    # 1. 在 spark-knowledge repo 中启动 hdfs, hms, hiveserver2, beeline
+    # 2. 启动 flink-cluster, 并配置 HADOOP_CLASSPATH 环境变量，在 flink 目录下执行 ./bin/flink run --python ../pyflink/sql/basic.py
+    # 3. 使用 read_hive_catalog.ipynb 读取数据
     """
     abspath = os.path.abspath('')  # pyflink/sql
     env = StreamExecutionEnvironment.get_execution_environment()
@@ -138,6 +145,17 @@ def write_multi_sinks():
     table_env = StreamTableEnvironment.create(env)
     # env = EnvironmentSettings.in_streaming_mode()
     # table_env = TableEnvironment.create(env)
+
+    # libs = ";".join([
+    #     f"file://{abspath}/../pyflink/lib/flink-faker-0.5.2.jar",
+    #     f"file://{abspath}/../pyflink/lib/flink-sql-connector-kafka-1.17.0.jar",
+    # ])
+    # table_env.get_config().set("pipeline.jars", libs)
+
+    catalog = HiveCatalog("myhive", "mydatabase", f"{abspath}/../pyflink/sql")
+    table_env.register_catalog("myhive", catalog)
+    table_env.use_catalog("myhive")
+
     table_env.execute_sql("""
 CREATE TEMPORARY TABLE server_logs ( 
     client_ip       STRING,
@@ -162,7 +180,7 @@ CREATE TEMPORARY TABLE server_logs (
 );    
     """)
     table_env.execute_sql("""
-CREATE TEMPORARY TABLE realtime_aggregations (
+CREATE TABLE IF NOT EXISTS realtime_aggregations (
   `browser`     STRING,
   `status_code` STRING,
   `end_time`    TIMESTAMP(3),
@@ -177,7 +195,7 @@ CREATE TEMPORARY TABLE realtime_aggregations (
 );    
     """)
     table_env.execute_sql(f"""
-CREATE TEMPORARY TABLE offline_datawarehouse (
+CREATE TABLE IF NOT EXISTS offline_datawarehouse (
     `browser`     STRING,
     `status_code` STRING,
     `dt`          STRING,
@@ -233,11 +251,11 @@ GROUP BY
     status_code,
     TUMBLE(log_time, INTERVAL '1' MINUTE);    
     """)
-    table_env.execute_sql("select * from realtime_aggregations").print()
+    # table_env.execute_sql("select * from realtime_aggregations").print()
 
 
 if __name__ == '__main__':
     # datagen_for_local_testing()
     # create_insert_temporary_table()
     # order_by_unbounded_tables()
-    write_multi_sinks()
+    write_multi_sinks_in_local_cluster()
