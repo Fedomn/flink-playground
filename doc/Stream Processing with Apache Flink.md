@@ -9,19 +9,15 @@
 - TaskManagers：the worker processes of Flink，each TaskManager provides a certain number of slots
 - Dispatcher：provides a REST interface to submit applications for execution
 
-<details><summary>Flink's components</summary>
+<summary>Flink's components</summary>
 
 ![](./images/flink-components.png)
-
-</details>
 
 ## Task Execution
 
 These tasks can be subtasks of the same operator (data parallelism), a different operator (task parallelism), or even from a different application (job parallelism).
 
-<details><summary>Flink Task Execution</summary>
+<summary>Flink Task Execution</summary>
 
 ![](./images/task-execution.png)
-
-</details>
 
