@@ -1,4 +1,6 @@
-from pyflink.table import EnvironmentSettings, TableEnvironment
+from pyflink.common import Types
+from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.table import StreamTableEnvironment
 from pyflink.table.expressions import col
 
 
@@ -6,8 +8,8 @@ def basic():
     """
     Flink 有两种关系型 API 来做流批统一处理：Table API 和 SQL。
     """
-    env = EnvironmentSettings.in_streaming_mode()
-    table_env = TableEnvironment.create(env)
+    env = StreamExecutionEnvironment.get_execution_environment()
+    table_env = StreamTableEnvironment.create(env)
     orders = table_env.from_elements(
         [('Jack', 'FRANCE', 10), ('Rose', 'ENGLAND', 30), ('Jack', 'FRANCE', 20)],
         ['name', 'country', 'revenue']
@@ -25,7 +27,13 @@ def basic():
     revenue.execute().print()
     # explain plan tree
     print(revenue.explain())
-    # sql
+
+    # sql: table to stream
+    retract_stream = table_env.to_retract_stream(revenue, type_info=Types.TUPLE([Types.STRING(), Types.LONG()]))
+    retract_stream.print()
+    env.execute("table to stream")
+
+    # sql: temp view
     table_env.create_temporary_view("orders", orders)
     table_result = table_env.execute_sql("select name, sum(revenue) as rev_sum from orders group by name")
     with table_result.collect() as results:
