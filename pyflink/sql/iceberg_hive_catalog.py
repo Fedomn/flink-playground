@@ -6,27 +6,13 @@ from pyflink.table import StreamTableEnvironment, EnvironmentSettings, TableEnvi
 hive_conf_dir = os.path.abspath('')
 
 
+# export HADOOP_CLASSPATH=`$HADOOP_HOME/bin/hadoop classpath`
+# ./bin/flink run --python ../pyflink/sql/iceberg_hive_catalog.py
 def run():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.enable_checkpointing(65 * 1000, CheckpointingMode.AT_LEAST_ONCE)
     env.set_state_backend(FsStateBackend(f"hdfs:///iceberg_catalog/checkpoints"))
     table_env = StreamTableEnvironment.create(env)
-
-    # create hive catalog and table
-    table_env.execute_sql(f"""
-CREATE CATALOG myhive WITH (
-    'type' = 'hive',
-    'hive-conf-dir'='{hive_conf_dir}'
-);
-""")
-    table_env.execute_sql("""
-    create table if not exists myhive.db.test (
-        id int
-    );
-""")
-    table_env.execute_sql("""
-    insert into myhive.db.test values (1);
-    """)
 
     # create iceberg hive catalog and table
     table_env.execute_sql(f"""
@@ -34,7 +20,7 @@ CREATE CATALOG iceberg_catalog WITH (
     'type'='iceberg',
     'catalog-type'='hive',
     'uri'='thrift://localhost:9083',
-    'hive-conf-dir'='{hive_conf_dir}',
+    'hive-conf-dir'='{hive_conf_dir}'
 );""")
     table_env.execute_sql("""
 CREATE TEMPORARY TABLE server_logs (
@@ -59,7 +45,7 @@ CREATE TEMPORARY TABLE server_logs (
   'fields.size.expression' = '#{number.numberBetween ''100'',''10000000''}'
 );    
     """)
-
+    table_env.execute_sql("drop table if exists iceberg_catalog.db.offline_datawarehouse")
     table_env.execute_sql(f"""
 CREATE TABLE IF NOT EXISTS iceberg_catalog.db.offline_datawarehouse (
     `browser`     STRING,
@@ -68,38 +54,54 @@ CREATE TABLE IF NOT EXISTS iceberg_catalog.db.offline_datawarehouse (
     `hour`        STRING,
     `minute`      STRING,
     `requests`    BIGINT NOT NULL
-) PARTITIONED BY (`dt`, `hour`, `minute`) WITH (
-  'sink.partition-commit.trigger' = 'partition-time', 
-  'sink.partition-commit.watermark-time-zone' = 'Asia/Shanghai',
-  'sink.partition-commit.policy.kind' = 'success-file',
-  'sink.partition-commit.delay' = '0s',
-  'sink.rolling-policy.check-interval' = '5s',
-  'sink.rolling-policy.rollover-interval' = '65s',
-  'sink.rolling-policy.inactivity-interval' = '80s'
-);    
+) PARTITIONED BY (`dt`);
     """)
     table_env.execute_sql("""
-CREATE TEMPORARY VIEW browsers AS  
+CREATE TEMPORARY VIEW browsers AS
 SELECT 
   REGEXP_EXTRACT(user_agent,'[^\/]+') AS browser,
   status_code,
   log_time
 FROM server_logs;    
     """)
+    # 它的时间只能比checkpoint的时间大，不能比checkpoint的时间小（如果小，则写文件的时间间隔还是checkpoint的时间）
     table_env.execute_sql("""
-INSERT INTO offline_datawarehouse
+INSERT INTO iceberg_catalog.db.offline_datawarehouse
 SELECT
     browser,
     status_code,
-    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'yyyy-MM-dd') AS `dt`,
-    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'HH') AS `hour`,
-    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '1' MINUTE), 'mm') AS `minute`,
+    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '5' SECOND), 'yyyy-MM-dd') AS `dt`,
+    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '5' SECOND), 'HH') AS `hour`,
+    DATE_FORMAT(TUMBLE_ROWTIME(log_time, INTERVAL '5' SECOND), 'mm') AS `minute`,
     COUNT(*) requests
 FROM browsers
-GROUP BY 
+GROUP BY
     browser,
     status_code,
-    TUMBLE(log_time, INTERVAL '1' MINUTE);    
+    TUMBLE(log_time, INTERVAL '5' SECOND);
+    """)
+    # 通过jdbc来达到实时的sink
+    table_env.execute_sql("""
+    CREATE TABLE test (
+        `id` int,
+        `num` int,
+        primary key (id) not enforced
+    ) WITH (
+      'connector' = 'jdbc',
+      'url'='jdbc:postgresql://127.0.0.1:5432/test',
+      'username' = 'postgres' ,
+      'password' = '', 
+      'table-name'='test'
+    );
+        """)
+    # -- Pg Table Definition
+    # CREATE TABLE "public"."test" (
+    #     "num" int8 NOT NULL,
+    #     "id" int8 NOT NULL,
+    #     PRIMARY KEY ("id")
+    # );
+    table_env.execute_sql("""
+    insert into test SELECT 1 as id, cast(COUNT(*) as int) as num FROM browsers;
     """)
 
 
