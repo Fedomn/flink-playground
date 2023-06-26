@@ -36,3 +36,13 @@ kafka-dump-log:
 kafka-metadata-shell:
 	cd ./kafka-src && \
 	./bin/kafka-metadata-shell.sh  --snapshot /tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log
+
+# kafka connect debezium
+# requirements: https://debezium.io/documentation/reference/2.3/connectors/mysql.html#mysql-deploying-a-connector
+start-connector:
+	cd ./kafka-src && \
+	./bin/connect-standalone.sh ./config/connect-standalone.properties
+
+connector-api-doc:
+	open https://kafka.apache.org/documentation/#connect_rest
+	curl http://localhost:8088/connectors
