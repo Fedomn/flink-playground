@@ -1,5 +1,9 @@
 package org.playground.flink.datastream;
 
+import com.google.common.collect.Lists;
+import com.ververica.cdc.connectors.mysql.source.MySqlSource;
+import com.ververica.cdc.debezium.JsonDebeziumDeserializationSchema;
+import java.util.Properties;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -25,17 +29,34 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.flink.TableLoader;
 import org.apache.iceberg.flink.sink.FlinkSink;
 
-import com.google.common.collect.Lists;
-import com.ververica.cdc.connectors.mysql.source.MySqlSource;
-import com.ververica.cdc.debezium.JsonDebeziumDeserializationSchema;
-import java.util.Properties;
-
 /**
 * CDC -> Kafka Sink -> Kafka Source -> Iceberg Sink。
 * 其中，Kafka Source需要自定义 CustomDebeziumJsonDeserializationSchema 来实现自定义的 row data。
 * 但是，需要事先定义 iceberg table 的 column names, types 传递给 CustomDebeziumJsonDeserializationSchema。
 */
 public class CDC {
+
+  public static void test_py4j(StreamExecutionEnvironment env) throws Exception {
+    MySqlSource<String> mysqlSource =
+        MySqlSource.<String>builder()
+            .hostname("localhost")
+            .port(3306)
+            .databaseList("test") // set captured database
+            .tableList("test.test") // set captured table
+            .username("root")
+            .password("")
+            .deserializer(new JsonDebeziumDeserializationSchema(false)) // converts SourceRecord to JSON String
+            .includeSchemaChanges(true)
+            .build();
+
+    env.enableCheckpointing(10 * 1000);
+
+    DataStream<String> cdcSource =
+        env.fromSource(mysqlSource, WatermarkStrategy.noWatermarks(), "cdctest").setParallelism(1);
+    cdcSource.print();
+    env.execute("MySql CDC");
+  }
+
   public static void main(String[] args) throws Exception {
     MySqlSource<String> mysqlSource = MySqlSource.<String>builder()
         .hostname("localhost")
